@@ -33,6 +33,11 @@
           "nextTeamNumber": {
             ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId)"
           },
+          "scores": {
+            "$scoreId": {
+              ".write": "auth != null"
+            }
+          },
           "registrations": {
             "$regId": {
               ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || (root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId && (root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin' || root.child('userRoleUids').child(auth.uid).child('role').val() === 'coach')))"
