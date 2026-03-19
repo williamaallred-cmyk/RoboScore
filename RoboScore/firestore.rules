@@ -1,0 +1,51 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "superAdmins": {
+      ".read": "auth != null",
+      ".write": false
+    },
+
+    "userRoles": {
+      ".read": "auth != null && root.child('superAdmins').child(auth.uid).val() === true",
+      "$emailKey": {
+        ".read": "auth != null",
+        ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin')"
+      }
+    },
+
+    "userRoleUids": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "districts": {
+      ".read": "auth != null && root.child('superAdmins').child(auth.uid).val() === true",
+      "$districtId": {
+        ".read": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId)",
+        ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || (root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin' && root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId))",
+        "public": {
+          ".read": true,
+          "nextTeamNumber": {
+            ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId)"
+          },
+          "registrations": {
+            "$regId": {
+              ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || (root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId && (root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin' || root.child('userRoleUids').child(auth.uid).child('role').val() === 'coach')))"
+            }
+          }
+        },
+        "users": {
+          "$uid": {
+            ".read": "auth != null && auth.uid == $uid",
+            ".write": "auth != null && auth.uid == $uid"
+          }
+        }
+      }
+    }
+  }
+}
