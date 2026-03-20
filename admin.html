@@ -782,6 +782,7 @@ function LinksView({ districtId, comp }) {
 }
 
 function AdminsView({ districtId }) {
+  const [admins,setAdmins]=useState([]);
   const [email,setEmail]=useState('');
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState('');

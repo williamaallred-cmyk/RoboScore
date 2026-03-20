@@ -127,7 +127,9 @@ function App() {
     if(!districtId||!compId){setReady(true);return;}
     auth.signInAnonymously().catch(console.error);
     const cr=challengesRef(),rr=regsRef(),sr=scoresRef(),mr=compMetaRef();
-    const ch=s=>setEvents(toArr(s));
+    console.log('[RoboScore] districtId=',districtId,'compId=',compId);
+    console.log('[RoboScore] challengesRef path=',cr.toString());
+    const ch=s=>{console.log('[RoboScore] challenges snap=',s.val());setEvents(toArr(s));};
     const rh=s=>setRegs(toArr(s));
     const sh=s=>setScores(toArr(s));
     const mh=s=>{const v=s.val();if(v){setScoringOpen(v.scoringOpen!==false);setCompName(v.name||'');}};
@@ -386,6 +388,7 @@ function App() {
           <p className="text-slate-500 font-medium">No challenges configured yet.</p>
           <p className="text-xs text-slate-400 mt-1">Ask your admin to add challenges in the Admin Panel.</p>
           <p className="text-xs text-slate-300 mt-2 font-mono">district: {districtId}</p>
+          <p className="text-xs text-slate-300 mt-0.5 font-mono">competition: {compId}</p>
         </div>)}
         {!ev&&events.length>0&&(<div className="text-center py-20 bg-white rounded-xl border border-slate-200">
           <Icon name="Zap" size={40} className="mx-auto text-slate-300 mb-4"/>
