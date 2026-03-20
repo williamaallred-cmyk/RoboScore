@@ -33,7 +33,9 @@ const toArr = snap => { const v=snap.val(); return v?Object.entries(v).map(([id,
 const encodeEmail = email => email.toLowerCase().replace(/\./g,',').replace(/@/g,'-at-');
 const schoolsRef  = did => db.ref(`districts/${did}/public/schools`);
 const coachesRef  = did => db.ref(`districts/${did}/public/coaches`);
-const regsRef     = did => db.ref(`districts/${did}/public/registrations`);
+const competitionsRef = did => db.ref(`districts/${did}/public/competitions`);
+const compRegsRef = (did,cid) => db.ref(`districts/${did}/public/competitions/${cid}/registrations`);
+const compNumRef  = (did,cid) => db.ref(`districts/${did}/public/competitions/${cid}/nextTeamNumber`);
 const userRolesRef = email => db.ref(`userRoles/${encodeEmail(email)}`);
 
 const ICONS = {
@@ -92,17 +94,19 @@ function App() {
   const [resolving,setResolving]=useState(false);
   const [schools,setSchools]=useState([]);
   const [coaches,setCoaches]=useState([]);
+  const [competitions,setCompetitions]=useState([]);
+  const [compId,setCompId]=useState('');
   const [regs,setRegs]=useState([]);
   const [school,setSchool]=useState(null);
   const [showSchoolPicker,setShowSchoolPicker]=useState(false);
   const [teamName,setTeamName]=useState('');
-  const [students,setStudents]=useState(['','','']);
+  const [studentCount,setStudentCount]=useState('');
   const [submitting,setSubmitting]=useState(false);
   const [done,setDone]=useState(false);
   const [error,setError]=useState('');
   const [editId,setEditId]=useState(null);
   const [editName,setEditName]=useState('');
-  const [editStudents,setEditStudents]=useState(['','','']);
+  const [editStudentCount,setEditStudentCount]=useState('');
   const [editSaving,setEditSaving]=useState(false);
   const [adminCoachId,setAdminCoachId]=useState('');
 
@@ -132,14 +136,28 @@ function App() {
 
   useEffect(()=>{
     if(!districtId)return;
-    const sr=schoolsRef(districtId),cr=coachesRef(districtId),rr=regsRef(districtId);
-    const sh=s=>setSchools(toArr(s)),ch=s=>setCoaches(toArr(s)),rh=s=>setRegs(toArr(s));
-    sr.on('value',sh);cr.on('value',ch);rr.on('value',rh);
-    return()=>{sr.off('value',sh);cr.off('value',ch);rr.off('value',rh);};
+    const sr=schoolsRef(districtId),cr=coachesRef(districtId),compRef=competitionsRef(districtId);
+    const sh=s=>setSchools(toArr(s)),ch=s=>setCoaches(toArr(s));
+    const comph=s=>{
+      const comps=toArr(s);
+      setCompetitions(comps);
+      // Auto-select if only one open competition
+      const urlComp=new URLSearchParams(location.search).get('competition');
+      if(urlComp){setCompId(urlComp);}
+      else if(!compId&&comps.filter(c=>c.registrationOpen).length===1){setCompId(comps.find(c=>c.registrationOpen).id);}
+    };
+    sr.on('value',sh);cr.on('value',ch);compRef.on('value',comph);
+    return()=>{sr.off('value',sh);cr.off('value',ch);compRef.off('value',comph);};
   },[districtId]);
 
   useEffect(()=>{
-    if(!user||!coaches.length||school)return;
+    if(!districtId||!compId)return;
+    const ref=compRegsRef(districtId,compId);
+    const h=s=>setRegs(toArr(s));
+    ref.on('value',h);return()=>ref.off('value',h);
+  },[districtId,compId]);
+
+  useEffect(()=>{
     const email=user.email?.toLowerCase();
     const mine=coaches.find(c=>c.email?.toLowerCase()===email);
     if(mine){
@@ -161,25 +179,24 @@ function App() {
     return r.coachEmail?.toLowerCase()===user.email?.toLowerCase();
   });
 
-  const startEdit=r=>{setEditId(r.id);setEditName(r.teamName);setEditStudents((r.students||[]).length?[...r.students]:['','','']);};
-  const cancelEdit=()=>{setEditId(null);setEditName('');setEditStudents(['','','']);};
+  const startEdit=r=>{setEditId(r.id);setEditName(r.teamName);setEditStudentCount(String(r.studentCount||''));};
+  const cancelEdit=()=>{setEditId(null);setEditName('');setEditStudentCount('');};
   const saveEdit=async()=>{
     if(!editName.trim()||editSaving)return;
     setEditSaving(true);
     try{
-      await regsRef(districtId).child(editId).update({teamName:editName.trim(),students:editStudents.map(s=>s.trim()).filter(Boolean)});
+      await compRegsRef(districtId,compId).child(editId).update({teamName:editName.trim(),studentCount:parseInt(editStudentCount)||0});
       cancelEdit();
     }catch(e){setError('Failed to save changes.');}
     setEditSaving(false);
   };
   const deleteReg=async r=>{
     if(!window.confirm(`Delete "${r.teamName}"? This cannot be undone.`))return;
-    try{await regsRef(districtId).child(r.id).remove();}catch(e){setError('Failed to delete team.');}
+    try{await compRegsRef(districtId,compId).child(r.id).remove();}catch(e){setError('Failed to delete team.');}
   };
 
   const submit=async()=>{
-    if(!teamName.trim()||!school||submitting)return;
-    const stArr=students.map(s=>s.trim()).filter(Boolean);
+    if(!teamName.trim()||!school||!compId||submitting)return;
     let coachEmail,coachName;
     if(isAdmin){
       const picked=coaches.find(c=>c.id===adminCoachId);
@@ -190,13 +207,14 @@ function App() {
       coachEmail=user.email.toLowerCase();
       coachName=coach?.name||user.displayName||'';
     }
+    const selectedComp=competitions.find(c=>c.id===compId);
     setSubmitting(true);setError('');
     try{
-      const numRef=db.ref(`districts/${districtId}/public/nextTeamNumber`);
+      const numRef=compNumRef(districtId,compId);
       const txResult=await numRef.transaction(n=>(n||0)+1);
       const teamNumber=txResult.snapshot.val();
-      await regsRef(districtId).push({teamNumber,teamName:teamName.trim(),schoolId:school.id,schoolName:school.name,students:stArr,coachEmail,coachName,registeredAt:new Date().toISOString()});
-      setTeamName('');setStudents(['','','']);setDone(true);setTimeout(()=>setDone(false),4000);
+      await compRegsRef(districtId,compId).push({teamNumber,teamName:teamName.trim(),schoolId:school.id,schoolName:school.name,studentCount:parseInt(studentCount)||0,coachEmail,coachName,competitionId:compId,competitionName:selectedComp?.name||'',registeredAt:new Date().toISOString()});
+      setTeamName('');setStudentCount('');setDone(true);setTimeout(()=>setDone(false),4000);
     }catch(e){setError('Failed to register. Please try again.');}
     setSubmitting(false);
   };
@@ -276,6 +294,17 @@ function App() {
         </div>)}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
           <h2 className="text-lg font-bold text-slate-800">Register a New Team</h2>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 tracking-wide">Competition *</label>
+            {competitions.filter(c=>c.registrationOpen).length===0?(
+              <div className="w-full p-3 border-2 border-slate-100 rounded-xl bg-slate-50 text-sm text-slate-500 italic">No competitions are open for registration.</div>
+            ):(
+              <select className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-blue-400 outline-none text-sm text-slate-800" value={compId} onChange={e=>setCompId(e.target.value)}>
+                <option value="">— select competition —</option>
+                {competitions.filter(c=>c.registrationOpen).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            )}
+          </div>
           {isAdmin&&(
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 tracking-wide">Coach (optional)</label>
@@ -308,19 +337,11 @@ function App() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Student Names</label>
-              <button onClick={()=>setStudents([...students,''])} className="text-xs text-blue-600 font-bold flex items-center gap-1 hover:underline"><Icon name="Plus" size={12}/> Add</button>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Number of Students</label>
             </div>
-            <div className="space-y-2">
-              {students.map((s,i)=>(
-                <div key={i} className="flex items-center gap-2">
-                  <input className="flex-1 p-2.5 border border-slate-200 rounded-lg focus:border-blue-400 outline-none text-sm" placeholder={`Student ${i+1}`} value={s} onChange={e=>{const n=[...students];n[i]=e.target.value;setStudents(n);}}/>
-                  {students.length>2&&<button onClick={()=>setStudents(students.filter((_,j)=>j!==i))} className="p-1.5 text-slate-300 hover:text-red-500"><Icon name="Trash2" size={14}/></button>}
-                </div>
-              ))}
-            </div>
+            <input type="number" min="1" max="99" className="w-full p-2.5 border border-slate-200 rounded-lg focus:border-blue-400 outline-none text-sm" placeholder="e.g. 4" value={studentCount} onChange={e=>setStudentCount(e.target.value)}/>
           </div>
-          <button onClick={submit} disabled={!teamName.trim()||!school||submitting}
+          <button onClick={submit} disabled={!teamName.trim()||!school||!compId||submitting}
             className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-all shadow-sm">
             {submitting?'Registering...':'Register Team'}
           </button>
@@ -334,22 +355,8 @@ function App() {
                   {editId===r.id?(
                     <div className="p-4 space-y-3 bg-blue-50">
                       <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Team Name</label>
-                        <input autoFocus className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:border-blue-400 outline-none" value={editName} onChange={e=>setEditName(e.target.value)}/>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-bold text-slate-500 uppercase">Students</label>
-                          <button onClick={()=>setEditStudents([...editStudents,''])} className="text-xs text-blue-600 font-bold hover:underline">+ Add</button>
-                        </div>
-                        <div className="space-y-1.5">
-                          {editStudents.map((s,i)=>(
-                            <div key={i} className="flex gap-2">
-                              <input className="flex-1 p-2 border border-slate-200 rounded-lg text-sm focus:border-blue-400 outline-none" placeholder={`Student ${i+1}`} value={s} onChange={e=>{const n=[...editStudents];n[i]=e.target.value;setEditStudents(n);}}/>
-                              {editStudents.length>1&&<button onClick={()=>setEditStudents(editStudents.filter((_,j)=>j!==i))} className="p-1.5 text-slate-300 hover:text-red-500"><Icon name="Trash2" size={13}/></button>}
-                            </div>
-                          ))}
-                        </div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Number of Students</label>
+                        <input type="number" min="1" max="99" autoFocus className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:border-blue-400 outline-none" placeholder="e.g. 4" value={editStudentCount} onChange={e=>setEditStudentCount(e.target.value)}/>
                       </div>
                       <div className="flex gap-2 pt-1">
                         <button onClick={saveEdit} disabled={!editName.trim()||editSaving} className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:opacity-40">{editSaving?'Saving...':'Save'}</button>
@@ -359,12 +366,13 @@ function App() {
                   ):(
                     <div className="flex items-center justify-between p-4 bg-slate-50">
                       <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                        {r.teamNumber&&<span className="text-xs font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">#{r.teamNumber}</span>}
-                        <div className="font-semibold text-slate-900 text-sm">{r.teamName}</div>
-                      </div>
-                        <div className="text-xs text-slate-500 mt-0.5">{r.schoolName}{isAdmin&&r.coachName&&<span className="ml-2 text-slate-400">· {r.coachName}</span>}</div>
-                        <div className="flex flex-wrap gap-1 mt-1.5">{(r.students||[]).filter(Boolean).map((s,i)=><span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{s}</span>)}</div>
+                        <div className="flex items-center gap-2 mb-1">
+                          {r.teamNumber&&<span className="text-xs font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">#{r.teamNumber}</span>}
+                          <div className="font-semibold text-slate-900 text-sm">{r.teamName}</div>
+                        </div>
+                        {r.teamNumber&&<div className="text-base font-black text-blue-700 mb-0.5">Team Number: {r.teamNumber}</div>}
+                        <div className="text-xs text-slate-500">{r.schoolName}{isAdmin&&r.coachName&&<span className="ml-2 text-slate-400">· {r.coachName}</span>}</div>
+                        {r.studentCount>0&&<div className="text-xs text-slate-400 mt-0.5">{r.studentCount} student{r.studentCount!==1?'s':''}</div>}
                       </div>
                       <div className="flex items-center gap-1 ml-3 shrink-0">
                         <button onClick={()=>startEdit(r)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit"><Icon name="Pencil" size={15}/></button>
