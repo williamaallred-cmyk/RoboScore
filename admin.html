@@ -566,6 +566,7 @@ function ScoresView({ districtId, compId }) {
 function RegistrationsView({ districtId, compId }) {
   const [regs,setRegs]=useState([]);
   const [search,setSearch]=useState('');
+  const [schoolFilter,setSchoolFilter]=useState('');
   const [editId,setEditId]=useState(null);
   const [editName,setEditName]=useState('');
   const [editStudentCount,setEditStudentCount]=useState('');
@@ -575,7 +576,14 @@ function RegistrationsView({ districtId, compId }) {
     const ref=compRegsRef(districtId,compId);
     const h=s=>setRegs(toArr(s));ref.on('value',h);return()=>ref.off('value',h);
   },[districtId,compId]);
-  const filt=regs.filter(r=>!search||String(r.teamNumber||'').includes(search)||r.teamName?.toLowerCase().includes(search.toLowerCase())||r.schoolName?.toLowerCase().includes(search.toLowerCase())||r.coachEmail?.toLowerCase().includes(search.toLowerCase()));
+  const schools=[...new Set(regs.map(r=>r.schoolName).filter(Boolean))].sort();
+  const filt=regs.filter(r=>{
+    const matchSearch=!search||String(r.teamNumber||'').includes(search)||r.teamName?.toLowerCase().includes(search.toLowerCase())||r.schoolName?.toLowerCase().includes(search.toLowerCase())||r.coachEmail?.toLowerCase().includes(search.toLowerCase());
+    const matchSchool=!schoolFilter||r.schoolName===schoolFilter;
+    return matchSearch&&matchSchool;
+  });
+  const totalStudents=regs.reduce((s,r)=>s+(parseInt(r.studentCount)||0),0);
+  const filtStudents=filt.reduce((s,r)=>s+(parseInt(r.studentCount)||0),0);
   const startEdit=r=>{setEditId(r.id);setEditName(r.teamName);setEditStudentCount(String(r.studentCount||''));};
   const cancelEdit=()=>{setEditId(null);setEditName('');setEditStudentCount('');};
   const saveEdit=async()=>{
@@ -591,9 +599,32 @@ function RegistrationsView({ districtId, compId }) {
   };
   return(
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-        <div><h3 className="text-lg font-bold text-slate-800">All Registrations</h3><p className="text-sm text-slate-500">{filt.length} of {regs.length} teams</p></div>
-        <input type="search" placeholder="Search..." className="p-2.5 border border-slate-200 rounded-lg text-sm w-full sm:w-72 focus:border-blue-400 outline-none" value={search} onChange={e=>setSearch(e.target.value)}/>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-4 flex items-center gap-4">
+          <div className="bg-blue-500 text-white rounded-lg p-2"><Icon name="Users" size={18}/></div>
+          <div>
+            <div className="text-2xl font-black text-blue-700">{regs.length}</div>
+            <div className="text-xs font-bold text-blue-500 uppercase tracking-wide">Teams Registered</div>
+          </div>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-5 py-4 flex items-center gap-4">
+          <div className="bg-emerald-500 text-white rounded-lg p-2"><Icon name="School" size={18}/></div>
+          <div>
+            <div className="text-2xl font-black text-emerald-700">{totalStudents}</div>
+            <div className="text-xs font-bold text-emerald-500 uppercase tracking-wide">Students Total</div>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input type="search" placeholder="Search by name, number, coach..." className="p-2.5 border border-slate-200 rounded-lg text-sm flex-1 focus:border-blue-400 outline-none" value={search} onChange={e=>setSearch(e.target.value)}/>
+        <select className="p-2.5 border border-slate-200 rounded-lg text-sm focus:border-blue-400 outline-none bg-white sm:w-56" value={schoolFilter} onChange={e=>setSchoolFilter(e.target.value)}>
+          <option value="">All Schools ({schools.length})</option>
+          {schools.map(s=><option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+      <div className="flex items-center justify-between text-xs text-slate-500 px-0.5">
+        <span>Showing <strong>{filt.length}</strong> of {regs.length} teams</span>
+        {totalStudents>0&&<span><strong>{filtStudents}</strong> of {totalStudents} students</span>}
       </div>
       {filt.length===0?(
         <div className="text-center py-16 bg-white rounded-xl border border-slate-200"><Icon name="Users" size={36} className="mx-auto text-slate-300 mb-4"/><p className="text-slate-500 font-medium">{search?'No matching teams.':'No registrations yet.'}</p></div>
