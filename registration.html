@@ -158,6 +158,7 @@ function App() {
   },[districtId,compId]);
 
   useEffect(()=>{
+    if(!user?.email)return;
     const email=user.email?.toLowerCase();
     const mine=coaches.find(c=>c.email?.toLowerCase()===email);
     if(mine){
