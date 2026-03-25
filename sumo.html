@@ -475,7 +475,8 @@ function SeedingSummary({ seeds }) {
   );
 }
 
-function SeedingView({ seeds, isAdmin, onSaveScore, onFinalize, onClearScores, saving }) {
+function SeedingView({ seeds, isAdmin, isJudge, onSaveScore, onFinalize, onClearScores, saving }) {
+  const canEnter = isAdmin || isJudge;
   const seedsList = Object.values(seeds || {});
   const [local, setLocal] = useState(() => {
     const m = {};
@@ -544,7 +545,7 @@ function SeedingView({ seeds, isAdmin, onSaveScore, onFinalize, onClearScores, s
                   {s.team.teamNumber ? <span className="ml-1 text-amber-600 font-semibold">#{s.team.teamNumber}</span> : ''}
                 </div>
               </div>
-              {isAdmin ? (
+              {canEnter ? (
                 <input type="number" min="0" max="50" step="1"
                   className="w-full text-right bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5 text-sm font-bold text-white focus:border-sky-400 outline-none"
                   placeholder="—"
@@ -561,35 +562,39 @@ function SeedingView({ seeds, isAdmin, onSaveScore, onFinalize, onClearScores, s
         })}
       </div>
 
-      {isAdmin && (
+      {canEnter && (
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button onClick={handleSave} disabled={!dirty || busySave || saving}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-sky-700 text-white font-bold rounded-xl hover:bg-sky-600 disabled:opacity-40 text-sm transition-all">
             <Icon name="CheckCircle" size={14} /> {busySave ? 'Saving…' : 'Save Scores'}
           </button>
-          <button
-            onClick={async () => {
-              if (dirty) await handleSave();
-              // Pass numeric scores directly — avoids relying on stale React state
-              const scores = {};
-              seedsList.forEach(s => {
-                const v = local[s.team.id];
-                if (isValid(v)) scores[s.team.id] = Number(v);
-              });
-              onFinalize(scores);
-            }}
-            disabled={!allScored || busySave || saving}
-            className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 text-slate-900 font-black rounded-xl hover:bg-amber-400 disabled:opacity-40 text-sm shadow-lg transition-all">
-            <Icon name="Zap" size={14} /> Build Bracket from Seeds
-          </button>
+          {isAdmin && (
+            <button
+              onClick={async () => {
+                if (dirty) await handleSave();
+                // Pass numeric scores directly — avoids relying on stale React state
+                const scores = {};
+                seedsList.forEach(s => {
+                  const v = local[s.team.id];
+                  if (isValid(v)) scores[s.team.id] = Number(v);
+                });
+                onFinalize(scores);
+              }}
+              disabled={!allScored || busySave || saving}
+              className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 text-slate-900 font-black rounded-xl hover:bg-amber-400 disabled:opacity-40 text-sm shadow-lg transition-all">
+              <Icon name="Zap" size={14} /> Build Bracket from Seeds
+            </button>
+          )}
           <span className="text-xs text-slate-500">{scoredCount} / {seedsList.length} scored</span>
-          <button onClick={onClearScores} disabled={busySave || saving}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 border border-slate-600 text-slate-400 hover:bg-red-900/60 hover:text-red-300 hover:border-red-700 font-semibold rounded-xl disabled:opacity-40 text-xs transition-all ml-auto">
-            <Icon name="RefreshCw" size={12} /> Clear Scores
-          </button>
+          {isAdmin && (
+            <button onClick={onClearScores} disabled={busySave || saving}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 border border-slate-600 text-slate-400 hover:bg-red-900/60 hover:text-red-300 hover:border-red-700 font-semibold rounded-xl disabled:opacity-40 text-xs transition-all ml-auto">
+              <Icon name="RefreshCw" size={12} /> Clear Scores
+            </button>
+          )}
         </div>
       )}
-      {!isAdmin && (
+      {!canEnter && (
         <p className="text-sm text-slate-500 italic px-1">
           {allScored ? 'All scores entered — waiting for bracket to be built.' : `${scoredCount} of ${seedsList.length} scores entered…`}
         </p>
@@ -1031,6 +1036,7 @@ function App() {
           <SeedingView
             seeds={bracket.seeds}
             isAdmin={isAdmin}
+            isJudge={isJudge}
             onSaveScore={saveSeedScore}
             onFinalize={startBracket}
             onClearScores={clearSeedScores}
