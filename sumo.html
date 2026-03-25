@@ -501,16 +501,6 @@ function SeedingView({ seeds, isAdmin, onSaveScore, onFinalize, onClearScores, s
   const allScored = seedsList.every(s => isValid(local[s.team.id]));
   const scoredCount = seedsList.filter(s => isValid(local[s.team.id])).length;
 
-  // Sort by locally-entered score descending so rank preview updates live
-  const sorted = [...seedsList].sort((a, b) => {
-    const sa = parseFloat(local[a.team.id]);
-    const sb = parseFloat(local[b.team.id]);
-    if (isNaN(sa) && isNaN(sb)) return 0;
-    if (isNaN(sa)) return 1;
-    if (isNaN(sb)) return -1;
-    return sb - sa;
-  });
-
   const handleSave = async () => {
     setBusySave(true);
     for (const s of seedsList) {
@@ -533,16 +523,16 @@ function SeedingView({ seeds, isAdmin, onSaveScore, onFinalize, onClearScores, s
 
       <div className="rounded-xl border border-slate-700 overflow-hidden">
         <div className="grid grid-cols-[2.5rem_1fr_8rem] gap-2 px-4 py-2 bg-slate-800/80 border-b border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-500">
-          <span>Seed</span><span>Team</span><span className="text-right">Score / 50</span>
+          <span>#</span><span>Team</span><span className="text-right">Score / 50</span>
         </div>
-        {sorted.map((s, idx) => {
+        {seedsList.map((s, idx) => {
           const val = local[s.team.id] ?? '';
           const valid = isValid(val);
           return (
             <div key={s.team.id}
               className={`grid grid-cols-[2.5rem_1fr_8rem] gap-2 items-center px-4 py-3 border-b border-slate-700/40 last:border-0 ${valid ? 'bg-slate-800' : 'bg-slate-800/40'}`}>
-              <span className={`text-sm font-black ${valid ? 'text-amber-400' : 'text-slate-600'}`}>
-                {valid ? `#${idx + 1}` : '—'}
+              <span className="text-sm font-black text-slate-500">
+                {idx + 1}
               </span>
               <div>
                 <div className="font-bold text-slate-100 text-sm leading-tight">{s.team.teamName}</div>
