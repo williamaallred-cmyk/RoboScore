@@ -753,7 +753,10 @@ function CompetitionsView({ districtId, onManage }) {
                   </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <a href={`sumo.html?district=${districtId}&competition=${comp.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 text-white text-xs font-bold rounded-lg hover:bg-slate-600">
+                  <Icon name="Trophy" size={13}/> Sumo Bracket
+                </a>
                 <button onClick={()=>onManage(comp)} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-lg hover:bg-amber-600">
                   <Icon name="Settings" size={14}/> Manage →
                 </button>
@@ -775,6 +778,7 @@ function LinksView({ districtId, comp }) {
   const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}`;
   const judgingUrl=`${base}judging.html?district=${districtId}&competition=${comp.id}`;
   const scoreboardUrl=`${base}scoreboard.html?district=${districtId}&competition=${comp.id}`;
+  const sumoUrl=`${base}sumo.html?district=${districtId}&competition=${comp.id}`;
   const copy=(url,key)=>{navigator.clipboard.writeText(url).then(()=>{setCopied(key);setTimeout(()=>setCopied(''),2000);}).catch(()=>{});}
   const togglePublic=async()=>{
     try{await competitionsRef(districtId).child(comp.id).update({scoreboardPublic:!comp.scoreboardPublic});setSaved(true);setTimeout(()=>setSaved(false),2000);}catch(e){console.error(e);}
@@ -784,7 +788,7 @@ function LinksView({ districtId, comp }) {
       <div><h3 className="text-lg font-bold text-slate-800">Links & Settings</h3><p className="text-sm text-slate-500">Share these with judges and participants.</p></div>
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-sm">
         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Shareable Links — {comp.name}</p>
-        {[{label:'Judging Panel',url:judgingUrl,key:'judging',color:'text-emerald-600',icon:'Award'},{label:'Scoreboard',url:scoreboardUrl,key:'scoreboard',color:'text-slate-700',icon:'BarChart2'}].map(({label,url,key,color,icon})=>(
+        {[{label:'Judging Panel',url:judgingUrl,key:'judging',color:'text-emerald-600',icon:'Award'},{label:'Scoreboard',url:scoreboardUrl,key:'scoreboard',color:'text-slate-700',icon:'BarChart2'},{label:'Sumo Bracket',url:sumoUrl,key:'sumo',color:'text-amber-600',icon:'Trophy'}].map(({label,url,key,color,icon})=>(
           <div key={key} className="space-y-1.5">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Icon name={icon} size={14} className={color}/>{label}</div>
             <div className="flex items-center gap-2">

@@ -109,6 +109,11 @@ function App() {
   const [editStudentCount,setEditStudentCount]=useState('');
   const [editSaving,setEditSaving]=useState(false);
   const [adminCoachId,setAdminCoachId]=useState('');
+  const [loginEp,setLoginEp]=useState(false);
+  const [loginEm,setLoginEm]=useState('');
+  const [loginPw,setLoginPw]=useState('');
+  const [loginErr,setLoginErr]=useState('');
+  const [loginBusy,setLoginBusy]=useState(false);
 
   useEffect(()=>{const u=auth.onAuthStateChanged(u=>{setUser(u);setLoading(false);});return()=>u();},[]);
 
@@ -224,8 +229,8 @@ function App() {
 
   if(loading||resolving)return<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
 
-  if(!isSignedIn){const [ep,setEp]=React.useState(false),[em,setEm]=React.useState(''),[ pw,setPw]=React.useState(''),[ err,setErr]=React.useState(''),[ busy,setBusy]=React.useState(false);
-    const submit=async()=>{setBusy(true);setErr('');try{await signInEmail(em,pw);}catch(e){setErr(e.message||'Sign-in failed.');}setBusy(false);};
+  if(!isSignedIn){
+    const handleLoginSubmit=async()=>{setLoginBusy(true);setLoginErr('');try{await signInEmail(loginEm,loginPw);}catch(e){setLoginErr(e.message||'Sign-in failed.');}setLoginBusy(false);};
     return(
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
@@ -243,15 +248,15 @@ function App() {
             Continue with Microsoft
           </button>
           <div className="relative flex items-center gap-3 py-1"><div className="flex-1 h-px bg-slate-200"/><span className="text-xs text-slate-400 font-semibold">OR</span><div className="flex-1 h-px bg-slate-200"/></div>
-          {!ep?(
-            <button onClick={()=>setEp(true)} className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2"><Icon name="Mail" size={16}/> Sign in with Email & Password</button>
+          {!loginEp?(
+            <button onClick={()=>setLoginEp(true)} className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2"><Icon name="Mail" size={16}/> Sign in with Email & Password</button>
           ):(
             <div className="space-y-3">
-              <input type="email" autoFocus placeholder="Email" className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-400 outline-none" value={em} onChange={e=>setEm(e.target.value)}/>
-              <input type="password" placeholder="Password" className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-400 outline-none" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&submit()}/>
-              {err&&<p className="text-xs text-red-500">{err}</p>}
-              <button onClick={submit} disabled={!em||!pw||busy} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-all">{busy?'Signing in...':'Sign In'}</button>
-              <button onClick={()=>{setEp(false);setErr('');}} className="w-full text-sm text-slate-400 hover:text-slate-600">Back</button>
+              <input type="email" autoFocus placeholder="Email" className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-400 outline-none" value={loginEm} onChange={e=>setLoginEm(e.target.value)}/>
+              <input type="password" placeholder="Password" className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:border-blue-400 outline-none" value={loginPw} onChange={e=>setLoginPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLoginSubmit()}/>
+              {loginErr&&<p className="text-xs text-red-500">{loginErr}</p>}
+              <button onClick={handleLoginSubmit} disabled={!loginEm||!loginPw||loginBusy} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-all">{loginBusy?'Signing in...':'Sign In'}</button>
+              <button onClick={()=>{setLoginEp(false);setLoginErr('');}} className="w-full text-sm text-slate-400 hover:text-slate-600">Back</button>
             </div>
           )}
         </div>

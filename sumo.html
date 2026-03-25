@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>RoboScore - Sumo Bracket</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body class="bg-slate-900">
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDCHyAsSgut1ugpDyv0U4gslu1Z_5WOdDk",
+  authDomain: "ms-robotics-reg-and-scoring.firebaseapp.com",
+  databaseURL: "https://ms-robotics-reg-and-scoring-default-rtdb.firebaseio.com",
+  projectId: "ms-robotics-reg-and-scoring",
+  appId: "1:1095575706479:web:79266306ca32f4f9bf269a"
+};
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+
+const districtId = (new URLSearchParams(location.search).get('district') || '').trim();
+const compId     = (new URLSearchParams(location.search).get('competition') || '').trim();
+
+const regsRef    = () => db.ref(`districts/${districtId}/public/competitions/${compId}/registrations`);
+const sumoRef    = () => db.ref(`districts/${districtId}/public/competitions/${compId}/sumo`);
+const compMetaRef = () => db.ref(`districts/${districtId}/public/competitions/${compId}`);
+
+const toArr = snap => { const v = snap.val(); return v ? Object.entries(v).map(([id, d]) => ({ id, ...d })) : []; };
+const encodeEmail = email => email.toLowerCase().replace(/\./g, ',').replace(/@/g, '-at-');
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
+const ICONS = {
+  Trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>',
+  Swords: '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/>',
+  CheckCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>',
+  AlertCircle: '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
+  ArrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  RefreshCw: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  Zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  LogOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  Shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  Users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  Award: '<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>',
+  Lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  BarChart2: '<line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/>',
+};
+function Icon({ name, size = 18, className = '' }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+      viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}
+      dangerouslySetInnerHTML={{ __html: ICONS[name] || '' }} />
+  );
+}
+
+// ─── Bracket logic ─────────────────────────────────────────────────────────────
+// Phases: 'de1' (double-elim round 1), 'de2' (double-elim round 2), 'finals' (best-of-3)
+// Each match: { id, phase, matchIndex, teamA, teamB, winner, loser, scores:{teamA,teamB} }
+// teamA/teamB = { id, teamName, teamNumber, schoolName } | 'BYE'
+// For 'finals', scores track per-game wins (best of 3)
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Pair teams into matches; if odd number add a BYE
+function pairTeams(teams) {
+  const matches = [];
+  for (let i = 0; i < teams.length; i += 2) {
+    matches.push({ teamA: teams[i], teamB: teams[i + 1] || 'BYE' });
+  }
+  return matches;
+}
+
+// Build seeding phase — first step before the bracket
+function buildSeedingPhase(teams) {
+  const seeds = {};
+  teams.forEach(t => { seeds[t.id] = { team: t, score: null }; });
+  return { phase: 'seeding', seeds, matches: [], finalists: [], champion: null };
+}
+
+// After all seeding scores are entered, sort teams and build the de1 bracket.
+// Standard seeding: #1 vs #N, #2 vs #N-1, … If odd count, #1 seed gets the BYE.
+function finalizeSeeding(bracket) {
+  const sorted = Object.values(bracket.seeds || {})
+    .filter(s => s.score !== null && s.score !== undefined)
+    .sort((a, b) => b.score - a.score);
+  const n = sorted.length;
+  const pairs = [];
+  if (n % 2 !== 0) {
+    // Odd: #1 seed gets the BYE, remaining pair normally
+    pairs.push({ teamA: sorted[0].team, teamB: 'BYE' });
+    const rest = sorted.slice(1); // now even length
+    for (let i = 0; i < rest.length / 2; i++) {
+      pairs.push({ teamA: rest[i].team, teamB: rest[rest.length - 1 - i].team });
+    }
+  } else {
+    // Even: standard seeding — #1 vs #N, #2 vs #N-1, …
+    for (let i = 0; i < n / 2; i++) {
+      pairs.push({ teamA: sorted[i].team, teamB: sorted[n - 1 - i].team });
+    }
+  }
+  const matches = pairs.map((p, idx) => ({
+    id: `de1_${idx}`, phase: 'de1', matchIndex: idx,
+    teamA: p.teamA, teamB: p.teamB, winner: null, loser: null,
+  }));
+  return { ...bracket, phase: 'de1', matches };
+}
+
+// Given bracket state + a match result, advance the bracket
+function applyResult(bracket, matchId, winnerId) {
+  const matches = bracket.matches.map(m => ({ ...m }));
+  const match = matches.find(m => m.id === matchId);
+  if (!match || match.winner) return bracket; // already decided
+
+  const winner = match.teamA === 'BYE' ? match.teamB
+    : match.teamB === 'BYE' ? match.teamA
+    : (match.teamA.id === winnerId ? match.teamA : match.teamB);
+  const loser = match.teamA === 'BYE' || match.teamB === 'BYE' ? null
+    : (winner === match.teamA ? match.teamB : match.teamA);
+
+  match.winner = winner;
+  match.loser = loser;
+
+  return advanceBracket({ ...bracket, matches });
+}
+
+// After recording a result, see if we can progress the overall phase
+function advanceBracket(bracket) {
+  const { phase } = bracket;
+
+  // Always auto-resolve BYE matches first — this ensures that after all real
+  // matches in a phase are decided, the phase transition fires correctly.
+  const matches = bracket.matches.map(m => {
+    if (m.winner) return m;
+    if (m.teamB === 'BYE') return { ...m, winner: m.teamA, loser: null };
+    if (m.teamA === 'BYE') return { ...m, winner: m.teamB, loser: null };
+    return m;
+  });
+
+  const phaseMatches = p => matches.filter(m => m.phase === p);
+  const allDone = p => phaseMatches(p).every(m => m.winner);
+
+  if (phase === 'de1' && allDone('de1')) {
+    const de1Winners = phaseMatches('de1').map(m => m.winner).filter(Boolean);
+    let de1Losers    = shuffle(phaseMatches('de1').map(m => m.loser).filter(Boolean));
+
+    // If the winners count is odd (one team got a R1 bye), give a random R1 loser
+    // a "redemption" match against the bye team rather than another free win.
+    let winnersList = shuffle([...de1Winners]);
+    if (winnersList.length % 2 !== 0 && de1Losers.length > 0) {
+      const luckyIdx = Math.floor(Math.random() * de1Losers.length);
+      const luckyLoser = de1Losers[luckyIdx];
+      de1Losers = de1Losers.filter((_, i) => i !== luckyIdx);
+      winnersList = [...winnersList, luckyLoser]; // now even
+    }
+
+    const winnerPairs = pairTeams(winnersList);
+    const loserPairs  = pairTeams(de1Losers);
+
+    const de2WinnerMatches = winnerPairs.map((p, idx) => ({
+      id: `de2w_${idx}`,
+      phase: 'de2',
+      bracket: 'winners',
+      matchIndex: idx,
+      teamA: p.teamA,
+      teamB: p.teamB,
+      winner: null,
+      loser: null,
+    }));
+    const de2LoserMatches = loserPairs.map((p, idx) => ({
+      id: `de2l_${idx}`,
+      phase: 'de2',
+      bracket: 'losers',
+      matchIndex: idx,
+      teamA: p.teamA,
+      teamB: p.teamB,
+      winner: null,
+      loser: null,
+    }));
+
+    const updated = { ...bracket, phase: 'de2', matches: [...matches, ...de2WinnerMatches, ...de2LoserMatches] };
+    return advanceBracket(updated); // recurse — auto-resolves any BYEs in de2 and checks if de2 is already complete
+  }
+
+  if (phase === 'de2') {
+    const de2w = phaseMatches('de2').filter(m => m.bracket === 'winners');
+    const de2l = phaseMatches('de2').filter(m => m.bracket === 'losers');
+    const winnersDone = de2w.length > 0 && de2w.every(m => m.winner);
+    const losersDone  = de2l.length === 0 || de2l.every(m => m.winner);
+    if (winnersDone && losersDone) {
+      const finalists = [
+        ...de2w.map(m => m.winner),
+        ...de2l.map(m => m.winner),
+      ].filter(Boolean);
+
+      const seen = new Set();
+      const uniqueFinalists = finalists.filter(t => {
+        if (seen.has(t.id)) return false;
+        seen.add(t.id); return true;
+      });
+
+      const finalist1 = uniqueFinalists[0] || null;
+      const finalist2 = uniqueFinalists[1] || null;
+
+      if (!finalist1 || !finalist2) {
+        return { ...bracket, phase: 'champion', champion: finalist1, matches };
+      }
+
+      const finalsMatch = {
+        id: 'finals_0',
+        phase: 'finals',
+        matchIndex: 0,
+        teamA: finalist1,
+        teamB: finalist2,
+        winsA: 0,
+        winsB: 0,
+        winner: null,
+        games: [],
+      };
+
+      return { ...bracket, phase: 'finals', matches: [...matches, finalsMatch], finalists: uniqueFinalists };
+    }
+  }
+
+  if (phase === 'finals') {
+    const finalsMatch = matches.find(m => m.phase === 'finals');
+    if (finalsMatch && finalsMatch.winner) {
+      return { ...bracket, champion: finalsMatch.winner, matches };
+    }
+  }
+
+  return { ...bracket, matches };
+}
+
+// Record a single game win in the finals (best of 3)
+function applyFinalsGame(bracket, winnerId) {
+  const matches = bracket.matches.map(m => {
+    if (m.phase !== 'finals') return m;
+    const isA = m.teamA.id === winnerId;
+    // Firebase omits keys whose value is 0, so coerce to number with || 0
+    const winsA = (m.winsA || 0) + (isA ? 1 : 0);
+    const winsB = (m.winsB || 0) + (!isA ? 1 : 0);
+    const games = [...(Array.isArray(m.games) ? m.games : Object.values(m.games || {})), winnerId];
+    let winner = null;
+    if (winsA >= 2) winner = m.teamA;
+    if (winsB >= 2) winner = m.teamB;
+    return { ...m, winsA, winsB, games, winner };
+  });
+  const fm = matches.find(m => m.phase === 'finals');
+  return advanceBracket({ ...bracket, matches, champion: fm?.winner || bracket.champion });
+}
+
+// ─── Firebase persistence helpers ─────────────────────────────────────────────
+// Serialize bracket for Firebase (convert team objects to IDs where needed)
+// We'll store full team objects since they're small and it simplifies reads.
+
+// ─── Components ───────────────────────────────────────────────────────────────
+
+function TeamChip({ team, highlight = false, isWinner = false }) {
+  if (!team || team === 'BYE') {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 opacity-50">
+        <span className="text-slate-500 text-sm italic">BYE</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all
+      ${isWinner ? 'bg-emerald-900 border-emerald-500 shadow-lg shadow-emerald-900/40' :
+        highlight ? 'bg-slate-700 border-slate-500' : 'bg-slate-800 border-slate-700'}`}>
+      {team.teamNumber && (
+        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border
+          ${isWinner ? 'bg-emerald-700 text-emerald-100 border-emerald-500' : 'bg-amber-900 text-amber-300 border-amber-700'}`}>
+          #{team.teamNumber}
+        </span>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className={`font-bold text-sm truncate ${isWinner ? 'text-emerald-100' : 'text-slate-100'}`}>{team.teamName}</div>
+        <div className="text-[10px] text-slate-400 truncate">{team.schoolName}</div>
+      </div>
+      {isWinner && <Icon name="CheckCircle" size={14} className="text-emerald-400 shrink-0" />}
+    </div>
+  );
+}
+
+function MatchCard({ match, isAdmin, onSelectWinner, onFinalsGame, viewOnly }) {
+  const [confirming, setConfirming] = useState(null);
+
+  if (match.phase === 'finals') {
+    const isDone = !!match.winner;
+    return (
+      <div className={`rounded-xl border-2 p-4 space-y-3 shadow-lg
+        ${isDone ? 'border-amber-500 bg-amber-950/40' : 'border-amber-600 bg-amber-950/20'}`}>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon name="Trophy" size={16} className="text-amber-400" />
+          <span className="text-xs font-black uppercase tracking-widest text-amber-400">Championship Final · Best of 3</span>
+        </div>
+        <div className="flex items-center gap-2 text-amber-300 text-sm font-bold justify-center">
+          <span>Game Score: {match.winsA || 0} – {match.winsB || 0}</span>
+        </div>
+        <div className="space-y-2">
+          {isDone ? (
+            <>
+              <TeamChip team={match.teamA} isWinner={match.winner?.id === match.teamA?.id} />
+              <TeamChip team={match.teamB} isWinner={match.winner?.id === match.teamB?.id} />
+              <div className="flex items-center gap-2 pt-1">
+                <Icon name="Trophy" size={16} className="text-amber-400" />
+                <span className="text-amber-300 font-bold text-sm">Champion: {match.winner?.teamName}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <TeamChip team={match.teamA} highlight />
+              <div className="text-center text-slate-500 text-xs font-bold">VS</div>
+              <TeamChip team={match.teamB} highlight />
+              {isAdmin && !viewOnly && (
+                <div className="pt-2 space-y-1">
+                  <p className="text-xs text-slate-400 text-center font-semibold">Who won this game?</p>
+                  <div className="flex gap-2">
+                    {[match.teamA, match.teamB].map(t => {
+                      if (!t || t === 'BYE') return null;
+                      const isConf = confirming === t.id;
+                      return (
+                        <button key={t.id}
+                          onClick={() => {
+                            if (isConf) { onFinalsGame(t.id); setConfirming(null); }
+                            else setConfirming(t.id);
+                          }}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all
+                            ${isConf ? 'bg-amber-400 text-amber-950 border-amber-300 shadow-lg' : 'bg-slate-700 text-slate-200 border-slate-600 hover:bg-amber-800 hover:border-amber-500'}`}>
+                          {isConf ? `✓ Confirm: ${t.teamName}` : t.teamName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {confirming && (
+                    <button onClick={() => setConfirming(null)} className="w-full text-xs text-slate-500 hover:text-slate-300 py-1">Cancel</button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Regular elimination match
+  const isDone = !!match.winner;
+  const isBye = match.teamB === 'BYE' || match.teamA === 'BYE';
+
+  return (
+    <div className={`rounded-xl border p-4 space-y-2
+      ${isDone ? 'border-slate-600 bg-slate-800/60' : 'border-slate-600 bg-slate-800'}`}>
+      <TeamChip team={match.teamA} isWinner={isDone && match.winner?.id === match.teamA?.id} />
+      {!isBye && <div className="text-center text-slate-600 text-[10px] font-black uppercase tracking-widest">vs</div>}
+      <TeamChip team={match.teamB} isWinner={isDone && match.winner?.id === match.teamB?.id} />
+      {!isDone && !isBye && isAdmin && !viewOnly && (
+        <div className="pt-1 space-y-1">
+          <p className="text-[10px] text-slate-500 text-center font-semibold uppercase tracking-wide">Select winner</p>
+          <div className="flex gap-1.5">
+            {[match.teamA, match.teamB].map(t => {
+              if (!t || t === 'BYE') return null;
+              const isConf = confirming === t.id;
+              return (
+                <button key={t.id}
+                  onClick={() => {
+                    if (isConf) { onSelectWinner(match.id, t.id); setConfirming(null); }
+                    else setConfirming(t.id);
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition-all
+                    ${isConf ? 'bg-emerald-400 text-emerald-950 border-emerald-300' : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-emerald-900 hover:border-emerald-600'}`}>
+                  {isConf ? `✓ ${t.teamName}` : t.teamName}
+                </button>
+              );
+            })}
+          </div>
+          {confirming && (
+            <button onClick={() => setConfirming(null)} className="w-full text-[10px] text-slate-600 hover:text-slate-400 py-0.5">Cancel</button>
+          )}
+        </div>
+      )}
+      {isDone && match.winner && (
+        <div className="flex items-center gap-1.5 pt-1">
+          <Icon name="CheckCircle" size={12} className="text-emerald-500" />
+          <span className="text-[11px] text-emerald-400 font-semibold">Winner: {match.winner.teamName}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhaseSection({ title, subtitle, color, matches, isAdmin, onSelectWinner, onFinalsGame, viewOnly }) {
+  return (
+    <div>
+      <div className={`flex items-center gap-2 mb-3 px-1`}>
+        <Icon name="Zap" size={16} className={color} />
+        <div>
+          <div className={`font-black uppercase tracking-wider text-sm ${color}`}>{title}</div>
+          {subtitle && <div className="text-xs text-slate-500">{subtitle}</div>}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {matches.map(m => (
+          <MatchCard key={m.id} match={m} isAdmin={isAdmin} onSelectWinner={onSelectWinner} onFinalsGame={onFinalsGame} viewOnly={viewOnly} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChampionBanner({ champion }) {
+  return (
+    <div className="rounded-2xl border-2 border-amber-400 bg-gradient-to-br from-amber-900/60 to-amber-700/30 p-8 text-center shadow-2xl shadow-amber-900/40">
+      <Icon name="Trophy" size={48} className="text-amber-400 mx-auto mb-3" />
+      <div className="text-2xl font-black text-amber-300 mb-1">🏆 CHAMPION 🏆</div>
+      {champion.teamNumber && (
+        <div className="text-amber-500 text-sm font-bold mb-1">Team #{champion.teamNumber}</div>
+      )}
+      <div className="text-3xl font-black text-white">{champion.teamName}</div>
+      <div className="text-slate-400 mt-1">{champion.schoolName}</div>
+    </div>
+  );
+}
+
+function SeedingSummary({ seeds }) {
+  const sorted = Object.values(seeds || {})
+    .filter(s => s.score !== null && s.score !== undefined)
+    .sort((a, b) => b.score - a.score);
+  if (!sorted.length) return null;
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3 px-1">
+        <Icon name="BarChart2" size={16} className="text-sky-400" />
+        <div className="font-black uppercase tracking-wider text-sm text-sky-400">Seeding Results</div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {sorted.map((s, idx) => (
+          <div key={s.team.id} className="flex items-center gap-3 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5">
+            <span className={`w-6 shrink-0 text-center text-xs font-black
+              ${idx === 0 ? 'text-amber-400' : idx === 1 ? 'text-slate-300' : idx === 2 ? 'text-orange-600' : 'text-slate-500'}`}>
+              #{idx + 1}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-slate-100 text-sm truncate">{s.team.teamName}</div>
+              <div className="text-[10px] text-slate-500 truncate">{s.team.schoolName}</div>
+            </div>
+            <span className="text-sky-400 font-black text-sm shrink-0">{s.score}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SeedingView({ seeds, isAdmin, onSaveScore, onFinalize, onClearScores, saving }) {
+  const seedsList = Object.values(seeds || {});
+  const [local, setLocal] = useState(() => {
+    const m = {};
+    Object.values(seeds || {}).forEach(s => {
+      m[s.team.id] = (s.score !== null && s.score !== undefined) ? String(s.score) : '';
+    });
+    return m;
+  });
+  const [dirty, setDirty] = useState(false);
+  const [busySave, setBusySave] = useState(false);
+
+  // Sync local inputs when scores are cleared externally via Firebase
+  useEffect(() => {
+    setLocal(() => {
+      const m = {};
+      Object.values(seeds || {}).forEach(s => {
+        m[s.team.id] = (s.score !== null && s.score !== undefined) ? String(s.score) : '';
+      });
+      return m;
+    });
+    setDirty(false);
+  }, [JSON.stringify(seeds)]);
+
+  const set = (id, val) => { setLocal(p => ({ ...p, [id]: val })); setDirty(true); };
+  const isValid = v => v !== '' && !isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 50;
+  const allScored = seedsList.every(s => isValid(local[s.team.id]));
+  const scoredCount = seedsList.filter(s => isValid(local[s.team.id])).length;
+
+  // Sort by locally-entered score descending so rank preview updates live
+  const sorted = [...seedsList].sort((a, b) => {
+    const sa = parseFloat(local[a.team.id]);
+    const sb = parseFloat(local[b.team.id]);
+    if (isNaN(sa) && isNaN(sb)) return 0;
+    if (isNaN(sa)) return 1;
+    if (isNaN(sb)) return -1;
+    return sb - sa;
+  });
+
+  const handleSave = async () => {
+    setBusySave(true);
+    for (const s of seedsList) {
+      const v = local[s.team.id];
+      if (isValid(v)) await onSaveScore(s.team.id, Number(v));
+    }
+    setDirty(false);
+    setBusySave(false);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-2 px-1">
+        <Icon name="BarChart2" size={16} className="text-sky-400" />
+        <div>
+          <div className="font-black uppercase tracking-wider text-sm text-sky-400">Seeding Round</div>
+          <div className="text-xs text-slate-500">Each team competes against the basic robot. Enter scores (0–50) — highest score = seed #1.</div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-700 overflow-hidden">
+        <div className="grid grid-cols-[2.5rem_1fr_8rem] gap-2 px-4 py-2 bg-slate-800/80 border-b border-slate-700 text-[10px] font-black uppercase tracking-widest text-slate-500">
+          <span>Seed</span><span>Team</span><span className="text-right">Score / 50</span>
+        </div>
+        {sorted.map((s, idx) => {
+          const val = local[s.team.id] ?? '';
+          const valid = isValid(val);
+          return (
+            <div key={s.team.id}
+              className={`grid grid-cols-[2.5rem_1fr_8rem] gap-2 items-center px-4 py-3 border-b border-slate-700/40 last:border-0 ${valid ? 'bg-slate-800' : 'bg-slate-800/40'}`}>
+              <span className={`text-sm font-black ${valid ? 'text-amber-400' : 'text-slate-600'}`}>
+                {valid ? `#${idx + 1}` : '—'}
+              </span>
+              <div>
+                <div className="font-bold text-slate-100 text-sm leading-tight">{s.team.teamName}</div>
+                <div className="text-[10px] text-slate-500">
+                  {s.team.schoolName}
+                  {s.team.teamNumber ? <span className="ml-1 text-amber-600 font-semibold">#{s.team.teamNumber}</span> : ''}
+                </div>
+              </div>
+              {isAdmin ? (
+                <input type="number" min="0" max="50" step="1"
+                  className="w-full text-right bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5 text-sm font-bold text-white focus:border-sky-400 outline-none"
+                  placeholder="—"
+                  value={val}
+                  onChange={e => set(s.team.id, e.target.value)}
+                />
+              ) : (
+                <span className={`text-right text-sm font-black block ${valid ? 'text-white' : 'text-slate-600'}`}>
+                  {valid ? val : '—'}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {isAdmin && (
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <button onClick={handleSave} disabled={!dirty || busySave || saving}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-sky-700 text-white font-bold rounded-xl hover:bg-sky-600 disabled:opacity-40 text-sm transition-all">
+            <Icon name="CheckCircle" size={14} /> {busySave ? 'Saving…' : 'Save Scores'}
+          </button>
+          <button
+            onClick={async () => {
+              if (dirty) await handleSave();
+              // Pass numeric scores directly — avoids relying on stale React state
+              const scores = {};
+              seedsList.forEach(s => {
+                const v = local[s.team.id];
+                if (isValid(v)) scores[s.team.id] = Number(v);
+              });
+              onFinalize(scores);
+            }}
+            disabled={!allScored || busySave || saving}
+            className="flex items-center gap-1.5 px-5 py-2.5 bg-amber-500 text-slate-900 font-black rounded-xl hover:bg-amber-400 disabled:opacity-40 text-sm shadow-lg transition-all">
+            <Icon name="Zap" size={14} /> Build Bracket from Seeds
+          </button>
+          <span className="text-xs text-slate-500">{scoredCount} / {seedsList.length} scored</span>
+          <button onClick={onClearScores} disabled={busySave || saving}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 border border-slate-600 text-slate-400 hover:bg-red-900/60 hover:text-red-300 hover:border-red-700 font-semibold rounded-xl disabled:opacity-40 text-xs transition-all ml-auto">
+            <Icon name="RefreshCw" size={12} /> Clear Scores
+          </button>
+        </div>
+      )}
+      {!isAdmin && (
+        <p className="text-sm text-slate-500 italic px-1">
+          {allScored ? 'All scores entered — waiting for bracket to be built.' : `${scoredCount} of ${seedsList.length} scores entered…`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function BracketView({ bracket, isAdmin, onSelectWinner, onFinalsGame, onReset, viewOnly }) {
+  const allMatches = bracket.matches || [];
+  const de1 = allMatches.filter(m => m.phase === 'de1');
+  const de2w = allMatches.filter(m => m.phase === 'de2' && m.bracket === 'winners');
+  const de2l = allMatches.filter(m => m.phase === 'de2' && m.bracket === 'losers');
+  const finals = allMatches.filter(m => m.phase === 'finals');
+
+  return (
+    <div className="space-y-8">
+      {isAdmin && (
+        <div className="flex justify-end">
+          <button onClick={onReset}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 border border-slate-600 text-slate-400 hover:bg-red-900/60 hover:text-red-300 hover:border-red-700 font-semibold rounded-lg text-xs transition-all">
+            <Icon name="RefreshCw" size={12} /> Reset to Seeding
+          </button>
+        </div>
+      )}
+      {bracket.champion && <ChampionBanner champion={bracket.champion} />}
+      {bracket.seeds && <SeedingSummary seeds={bracket.seeds} />}
+      {de1.length > 0 && (
+        <PhaseSection
+          title="Round 1 — Double Elimination"
+          subtitle="Lose once and you're in the losers bracket; lose twice and you're out."
+          color="text-blue-400"
+          matches={de1}
+          isAdmin={isAdmin}
+          onSelectWinner={onSelectWinner}
+          onFinalsGame={onFinalsGame}
+          viewOnly={viewOnly}
+        />
+      )}
+      {(de2w.length > 0 || de2l.length > 0) && (
+        <>
+          {de2w.length > 0 && (
+            <PhaseSection
+              title="Round 2 — Winners Bracket"
+              subtitle="Undefeated teams compete. Winner advances to Finals."
+              color="text-emerald-400"
+              matches={de2w}
+              isAdmin={isAdmin}
+              onSelectWinner={onSelectWinner}
+              onFinalsGame={onFinalsGame}
+              viewOnly={viewOnly}
+            />
+          )}
+          {de2l.length > 0 && (
+            <PhaseSection
+              title="Round 2 — Losers Bracket"
+              subtitle="Teams with one loss compete for a second chance at Finals."
+              color="text-orange-400"
+              matches={de2l}
+              isAdmin={isAdmin}
+              onSelectWinner={onSelectWinner}
+              onFinalsGame={onFinalsGame}
+              viewOnly={viewOnly}
+            />
+          )}
+        </>
+      )}
+      {finals.length > 0 && (
+        <PhaseSection
+          title="Championship Final"
+          subtitle="Best of 3. First to win 2 games is the Sumo Champion!"
+          color="text-amber-400"
+          matches={finals}
+          isAdmin={isAdmin}
+          onSelectWinner={onSelectWinner}
+          onFinalsGame={onFinalsGame}
+          viewOnly={viewOnly}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Error boundary — keeps the header/reset button alive if BracketView crashes
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6">
+          <div className="bg-red-900/40 border border-red-700 rounded-2xl p-6 max-w-lg w-full text-center">
+            <Icon name="AlertCircle" size={32} className="text-red-400 mx-auto mb-3" />
+            <p className="text-red-300 font-bold mb-1">Something went wrong displaying the bracket.</p>
+            <p className="text-slate-400 text-xs font-mono break-all">{this.state.error.message}</p>
+          </div>
+          {this.props.onReset && (
+            <button onClick={this.props.onReset}
+              className="flex items-center gap-2 px-6 py-3 bg-red-700 text-white font-black rounded-xl hover:bg-red-600 shadow-xl text-sm">
+              <Icon name="RefreshCw" size={16} /> Reset to Seeding
+            </button>
+          )}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const [user, setUser] = useState(undefined);
+  const [roleInfo, setRoleInfo] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  const [regs, setRegs] = useState([]);
+  const [bracket, setBracket] = useState(null);
+  const [compName, setCompName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
+
+  // Auth
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(u => {
+      if (u) { setUser(u); }
+      else { auth.signInAnonymously().catch(e => console.error(e)); }
+    });
+    return () => unsub();
+  }, []);
+
+  // Role resolution
+  useEffect(() => {
+    if (!user || user.isAnonymous) { setRoleInfo({ role: 'viewer' }); return; }
+    setResolving(true);
+    db.ref('superAdmins').child(user.uid).once('value').then(snap => {
+      if (snap.val() === true) { setRoleInfo({ role: 'superAdmin' }); setResolving(false); return; }
+      const key = encodeEmail(user.email);
+      db.ref(`userRoles/${key}`).once('value').then(rs => {
+        const r = rs.val();
+        setRoleInfo(r?.districtId ? { role: r.role || 'coach', districtId: r.districtId } : { role: 'viewer' });
+        setResolving(false);
+      });
+    }).catch(() => { setRoleInfo({ role: 'viewer' }); setResolving(false); });
+  }, [user]);
+
+  // Load registrations
+  useEffect(() => {
+    if (!districtId || !compId) return;
+    const ref = regsRef();
+    const h = s => setRegs(toArr(s));
+    ref.on('value', h);
+    return () => ref.off('value', h);
+  }, []);
+
+  // Load bracket
+  useEffect(() => {
+    if (!districtId || !compId) return;
+    const ref = sumoRef();
+    const h = s => {
+      const v = s.val();
+      if (!v) { setBracket(null); return; }
+      // Firebase RTDB converts JS arrays to {0:…,1:…} objects and drops empty arrays
+      // entirely (returning undefined). Always normalise matches to a plain array.
+      let matches;
+      if (!v.matches) {
+        matches = [];
+      } else if (Array.isArray(v.matches)) {
+        matches = v.matches.map(m => ({
+          ...m,
+          games: Array.isArray(m.games) ? m.games : (m.games ? Object.values(m.games) : []),
+        }));
+      } else {
+        matches = Object.values(v.matches).map(m => ({
+          ...m,
+          games: Array.isArray(m.games) ? m.games : (m.games ? Object.values(m.games) : []),
+        }));
+      }
+      setBracket({ ...v, matches });
+    };
+    ref.on('value', h);
+    return () => ref.off('value', h);
+  }, []);
+
+  // Load comp name
+  useEffect(() => {
+    if (!districtId || !compId) return;
+    compMetaRef().once('value').then(s => {
+      const v = s.val();
+      if (v?.name) setCompName(v.name);
+    });
+  }, []);
+
+  const isAdmin = roleInfo?.role === 'districtAdmin' || roleInfo?.role === 'superAdmin';
+
+  const generateBracket = async () => {
+    if (regs.length < 2) { setError('Need at least 2 registered teams to start.'); return; }
+    setGenerating(true); setError('');
+    try {
+      const teams = regs.map(r => ({ id: r.id, teamName: r.teamName, teamNumber: r.teamNumber, schoolName: r.schoolName }));
+      await sumoRef().set(buildSeedingPhase(teams));
+    } catch (e) { setError('Failed to start seeding.'); console.error(e); }
+    setGenerating(false);
+  };
+
+  // Reset everything back to a blank seeding phase — no confirm, safe for testing
+  const resetToSeeding = async () => {
+    if (regs.length < 2) return;
+    setGenerating(true); setError('');
+    try {
+      const teams = regs.map(r => ({ id: r.id, teamName: r.teamName, teamNumber: r.teamNumber, schoolName: r.schoolName }));
+      await sumoRef().set(buildSeedingPhase(teams));
+    } catch (e) { setError('Failed to reset.'); console.error(e); }
+    setGenerating(false);
+  };
+
+  // Clear only scores within the seeding phase (keeps teams, stays in seeding)
+  const clearSeedScores = async () => {
+    if (!bracket?.seeds) return;
+    setSaving(true);
+    try {
+      const updates = {};
+      Object.keys(bracket.seeds).forEach(id => { updates[`${id}/score`] = null; });
+      await sumoRef().child('seeds').update(updates);
+    } catch (e) { setError('Failed to clear scores.'); console.error(e); }
+    setSaving(false);
+  };
+
+  const saveSeedScore = async (teamId, score) => {
+    try {
+      await sumoRef().child('seeds').child(teamId).child('score').set(score);
+    } catch (e) { setError('Failed to save score.'); console.error(e); }
+  };
+
+  const startBracket = async (localScores) => {
+    if (!bracket || saving) return;
+    setSaving(true);
+    try {
+      // Merge the freshly-entered scores into the bracket before seeding,
+      // because the Firebase listener may not have propagated the saved scores yet.
+      const seeds = {};
+      Object.entries(bracket.seeds || {}).forEach(([id, s]) => {
+        seeds[id] = { ...s, score: (localScores && localScores[id] !== undefined) ? localScores[id] : s.score };
+      });
+      const updated = finalizeSeeding({ ...bracket, seeds });
+      await sumoRef().set(updated);
+    } catch (e) { setError('Failed to build bracket.'); console.error(e); }
+    setSaving(false);
+  };
+
+  const selectWinner = async (matchId, winnerId) => {
+    if (!bracket || saving) return;
+    setSaving(true);
+    try {
+      const updated = applyResult(bracket, matchId, winnerId);
+      await sumoRef().set(updated);
+    } catch (e) { setError('Failed to save result.'); console.error(e); }
+    setSaving(false);
+  };
+
+  const finalsGame = async (winnerId) => {
+    if (!bracket || saving) return;
+    setSaving(true);
+    try {
+      const updated = applyFinalsGame(bracket, winnerId);
+      await sumoRef().set(updated);
+    } catch (e) { setError('Failed to save game result.'); console.error(e); }
+    setSaving(false);
+  };
+
+  // Missing params
+  if (!districtId || !compId) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
+        <div className="bg-slate-800 rounded-2xl p-8 max-w-md text-center border border-slate-700">
+          <Icon name="AlertCircle" size={36} className="text-red-400 mx-auto mb-4" />
+          <h2 className="text-lg font-bold text-white mb-2">Missing Parameters</h2>
+          <p className="text-slate-400 text-sm">URL must include <code className="bg-slate-700 px-1 rounded">?district=…&competition=…</code></p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user === undefined || resolving) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500" />
+      </div>
+    );
+  }
+
+  const viewOnly = !isAdmin;
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex flex-col">
+      {/* Header */}
+      <header className="bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="bg-amber-500 p-1.5 rounded-lg text-slate-900">
+              <Icon name="Trophy" size={18} />
+            </div>
+            <div>
+              <div className="font-black text-white">Sumo Championship</div>
+              {compName && <div className="text-xs text-slate-400">{compName}</div>}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {saving && <span className="text-xs text-amber-400 font-semibold animate-pulse">Saving…</span>}
+          {isAdmin && !bracket && (
+            <button
+              onClick={generateBracket}
+              disabled={generating || saving || regs.length < 2}
+              className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-500 disabled:opacity-40 text-sm shadow-lg transition-all">
+              <Icon name="BarChart2" size={14} />
+              Start Seeding
+            </button>
+          )}
+          {isAdmin && bracket && (
+            <button
+              onClick={resetToSeeding}
+              disabled={generating || saving}
+              className="flex items-center gap-1.5 px-4 py-2 bg-red-800 text-white font-bold rounded-lg hover:bg-red-700 disabled:opacity-40 text-sm shadow-lg transition-all">
+              <Icon name="RefreshCw" size={14} />
+              Reset to Seeding
+            </button>
+          )}
+          <a href="index.html" className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+            <Icon name="ArrowLeft" size={14} /> Home
+          </a>
+        </div>
+      </header>
+
+      <main className="flex-1 p-6 max-w-5xl mx-auto w-full">
+        {error && (
+          <div className="mb-6 bg-red-900/40 border border-red-700 rounded-xl px-5 py-4 flex items-center gap-3">
+            <Icon name="AlertCircle" size={18} className="text-red-400" />
+            <span className="text-red-300 text-sm">{error}</span>
+            <button onClick={() => setError('')} className="ml-auto text-red-500 hover:text-red-300 text-xs font-bold">Dismiss</button>
+          </div>
+        )}
+
+        {/* Registered teams count */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5">
+            <Icon name="Users" size={15} className="text-slate-400" />
+            <span className="text-sm text-slate-300 font-semibold">{regs.length} team{regs.length !== 1 ? 's' : ''} registered</span>
+          </div>
+          {bracket && bracket.phase && (
+            <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5">
+              <Icon name="Zap" size={15} className="text-amber-400" />
+              <span className="text-sm text-amber-300 font-semibold">
+                {bracket.champion ? 'Tournament Complete' :
+                  bracket.phase === 'seeding' ? 'Seeding Round' :
+                  bracket.phase === 'de1' ? 'Round 1 — Double Elimination' :
+                  bracket.phase === 'de2' ? 'Round 2 — Double Elimination' :
+                  bracket.phase === 'finals' ? 'Championship Final' : ''}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {!bracket ? (
+          <div className="text-center py-24 bg-slate-800 rounded-2xl border border-slate-700">
+            <Icon name="Swords" size={48} className="text-slate-600 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-slate-300 mb-2">No Bracket Yet</h2>
+            {isAdmin ? (
+              <>
+                <p className="text-slate-500 text-sm mb-6">
+                  {regs.length < 2
+                    ? `${regs.length} team registered — need at least 2 to start.`
+                    : `${regs.length} teams ready. Start the seeding round first!`}
+                </p>
+                {regs.length >= 2 && (
+                  <button
+                    onClick={generateBracket}
+                    disabled={generating}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-sky-600 text-white font-black rounded-xl hover:bg-sky-500 disabled:opacity-50 shadow-xl transition-all text-sm">
+                    <Icon name="BarChart2" size={16} />
+                    {generating ? 'Starting…' : 'Start Seeding Round'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <p className="text-slate-500 text-sm">The seeding round hasn't started yet. Check back soon!</p>
+            )}
+          </div>
+        ) : bracket.phase === 'seeding' ? (
+          <SeedingView
+            seeds={bracket.seeds}
+            isAdmin={isAdmin}
+            onSaveScore={saveSeedScore}
+            onFinalize={startBracket}
+            onClearScores={clearSeedScores}
+            saving={saving}
+          />
+        ) : (
+          <ErrorBoundary onReset={isAdmin ? resetToSeeding : null}>
+            <BracketView
+              bracket={bracket}
+              isAdmin={isAdmin}
+              onSelectWinner={selectWinner}
+              onFinalsGame={finalsGame}
+              onReset={resetToSeeding}
+              viewOnly={viewOnly}
+            />
+          </ErrorBoundary>
+        )}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
