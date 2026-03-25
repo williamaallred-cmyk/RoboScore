@@ -775,11 +775,30 @@ function CompetitionsView({ districtId, onManage }) {
 function LinksView({ districtId, comp }) {
   const [copied,setCopied]=useState('');
   const [saved,setSaved]=useState(false);
+  const [jpCurrent,setJpCurrent]=useState(undefined);
+  const [jpOpen,setJpOpen]=useState(false);
+  const [jpInput,setJpInput]=useState('');
+  const [jpSaving,setJpSaving]=useState(false);
+  const [jpSaved,setJpSaved]=useState(false);
   const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}`;
   const judgingUrl=`${base}judging.html?district=${districtId}&competition=${comp.id}`;
   const scoreboardUrl=`${base}scoreboard.html?district=${districtId}&competition=${comp.id}`;
   const sumoUrl=`${base}sumo.html?district=${districtId}&competition=${comp.id}`;
   const copy=(url,key)=>{navigator.clipboard.writeText(url).then(()=>{setCopied(key);setTimeout(()=>setCopied(''),2000);}).catch(()=>{});}
+  const jpRef=()=>db.ref(`districts/${districtId}/public/judgePassword`);
+  useEffect(()=>{
+    jpRef().once('value').then(snap=>setJpCurrent(snap.val()||null));
+  },[districtId]);
+  const saveJp=async()=>{
+    setJpSaving(true);
+    try{
+      const val=jpInput.trim()||null;
+      await jpRef().set(val);
+      setJpCurrent(val);setJpOpen(false);setJpInput('');
+      setJpSaved(true);setTimeout(()=>setJpSaved(false),2500);
+    }catch(e){console.error(e);}
+    setJpSaving(false);
+  };
   const togglePublic=async()=>{
     try{await competitionsRef(districtId).child(comp.id).update({scoreboardPublic:!comp.scoreboardPublic});setSaved(true);setTimeout(()=>setSaved(false),2000);}catch(e){console.error(e);}
   };
@@ -790,15 +809,44 @@ function LinksView({ districtId, comp }) {
         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Shareable Links — {comp.name}</p>
         {[{label:'Judging Panel',url:judgingUrl,key:'judging',color:'text-emerald-600',icon:'Award'},{label:'Scoreboard',url:scoreboardUrl,key:'scoreboard',color:'text-slate-700',icon:'BarChart2'},{label:'Sumo Bracket',url:sumoUrl,key:'sumo',color:'text-amber-600',icon:'Trophy'}].map(({label,url,key,color,icon})=>(
           <div key={key} className="space-y-1.5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Icon name={icon} size={14} className={color}/>{label}</div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <Icon name={icon} size={14} className={color}/>{label}
+              {key==='judging'&&jpCurrent&&<span className="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1"><Icon name="Lock" size={10}/>Password set</span>}
+            </div>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-600 truncate font-mono">{url}</code>
               <button onClick={()=>copy(url,key)} className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${copied===key?'bg-emerald-50 text-emerald-600 border-emerald-200':'bg-white text-slate-600 border-slate-200 hover:border-amber-400 hover:text-amber-600'}`}>
                 <Icon name={copied===key?'CheckCircle':'Copy'} size={13}/>{copied===key?'Copied!':'Copy'}
               </button>
+              {key==='judging'&&(
+                <button onClick={()=>{setJpOpen(o=>!o);setJpInput(jpCurrent||'');}}
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${jpOpen?'bg-amber-50 text-amber-700 border-amber-300':'bg-white text-slate-600 border-slate-200 hover:border-amber-400 hover:text-amber-600'}`}>
+                  <Icon name="Lock" size={13}/>{jpCurrent?'Edit PW':'Set PW'}
+                </button>
+              )}
             </div>
+            {key==='judging'&&jpOpen&&(
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="text-xs font-bold text-slate-600 flex items-center gap-1.5"><Icon name="Lock" size={12}/>Judge Password</div>
+                <p className="text-xs text-slate-500">Judges enter this to access the judging panel and sumo bracket. Leave blank and save to remove the gate.</p>
+                <div className="flex gap-2">
+                  <input type="text" value={jpInput} onChange={e=>setJpInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveJp()}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-amber-400 outline-none bg-white"
+                    placeholder="Enter judge password…"/>
+                  <button onClick={saveJp} disabled={jpSaving}
+                    className="px-4 py-2 bg-amber-500 text-white font-bold rounded-lg text-xs hover:bg-amber-600 disabled:opacity-40 whitespace-nowrap">
+                    {jpSaving?'Saving…':'Save'}
+                  </button>
+                  <button onClick={()=>setJpOpen(false)}
+                    className="px-3 py-2 border border-slate-200 text-slate-500 rounded-lg text-xs hover:bg-slate-100 whitespace-nowrap">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
+        {jpSaved&&<p className="text-xs text-emerald-600 font-semibold flex items-center gap-1"><Icon name="CheckCircle" size={12}/> Judge password saved.</p>}
       </div>
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-sm">
         <div className="flex items-center justify-between">

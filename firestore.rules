@@ -43,6 +43,14 @@
               ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || (root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId && (root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin' || root.child('userRoleUids').child(auth.uid).child('role').val() === 'coach')))"
             }
           },
+          "judgePassword": {
+            ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || (root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin' && root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId))"
+          },
+          "judgeVerified": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid"
+            }
+          },
           "competitions": {
             "$compId": {
               ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || (root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin' && root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId))",
@@ -66,7 +74,7 @@
               },
               "sumo": {
                 ".read": true,
-                ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || (root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin' && root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId))"
+                ".write": "auth != null && (root.child('superAdmins').child(auth.uid).val() === true || (root.child('userRoleUids').child(auth.uid).child('role').val() === 'districtAdmin' && root.child('userRoleUids').child(auth.uid).child('districtId').val() === $districtId) || root.child('districts').child($districtId).child('public').child('judgeVerified').child(auth.uid).val() === true)"
               }
             }
           }

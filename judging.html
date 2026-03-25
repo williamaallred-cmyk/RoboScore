@@ -49,6 +49,7 @@ const ICONS = {
   Trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>',
   RefreshCw: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   Pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  Lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 };
 
 function Icon({ name, size=18, className='' }) {
@@ -122,6 +123,10 @@ function App() {
   const [saved,setSaved]=useState({});
   const [confirm,setConfirm]=useState(null);
   const [editTeamId,setEditTeamId]=useState(null);
+  const [judgeOk,setJudgeOk]=useState(null); // null=checking, false=needs pw, true=ok
+  const [storedJp,setStoredJp]=useState(null);
+  const [jpInput,setJpInput]=useState('');
+  const [jpErr,setJpErr]=useState('');
 
   useEffect(()=>{
     if(!districtId||!compId){setReady(true);return;}
@@ -137,6 +142,29 @@ function App() {
     setReady(true);
     return()=>{cr.off('value',ch);rr.off('value',rh);sr.off('value',sh);mr.off('value',mh);};
   },[]);
+
+  // Judge password gate check
+  useEffect(()=>{
+    if(!districtId||!compId){setJudgeOk(true);return;}
+    db.ref(`districts/${districtId}/public/judgePassword`).once('value').then(snap=>{
+      const pw=snap.val();
+      if(!pw){setJudgeOk(true);}
+      else{setStoredJp(pw);setJudgeOk(false);}
+    }).catch(()=>setJudgeOk(true)); // fail open if unreadable
+  },[]);
+
+  const handleJudgeLogin=()=>{
+    if(jpInput===storedJp){
+      setJudgeOk(true);setJpInput('');setJpErr('');
+      // Write verification so sumo bracket Firebase rules allow writes too
+      const u=auth.currentUser;
+      const doVerify=uid=>db.ref(`districts/${districtId}/public/judgeVerified/${uid}`).set(true).catch(console.error);
+      if(u) doVerify(u.uid);
+      else auth.signInAnonymously().then(c=>doVerify(c.user.uid)).catch(console.error);
+    } else {
+      setJpErr('Incorrect password. Please try again.');
+    }
+  };
 
   const ev=events.find(e=>e.id===selEv);
   const evScores=useMemo(()=>scores.filter(s=>s.challengeId===selEv||s.eventId===selEv),[scores,selEv]);
@@ -220,7 +248,30 @@ function App() {
     </div>
   );
 
-  if(!ready)return<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500"></div></div>;
+  if(!ready||judgeOk===null)return<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500"></div></div>;
+
+  if(judgeOk===false)return(
+    <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+      <div className="bg-white rounded-2xl shadow-xl p-10 max-w-sm w-full border border-slate-200 space-y-6">
+        <div className="text-center">
+          <div className="bg-amber-100 text-amber-600 w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"><Icon name="Lock" size={28}/></div>
+          <h2 className="text-xl font-bold text-slate-900 mb-1">Judge Access</h2>
+          <p className="text-slate-500 text-sm">Enter the judge password provided by your district admin.</p>
+        </div>
+        <div className="space-y-3">
+          <input type="password" value={jpInput} onChange={e=>{setJpInput(e.target.value);setJpErr('');}} onKeyDown={e=>e.key==='Enter'&&handleJudgeLogin()}
+            className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-medium focus:border-amber-400 outline-none"
+            placeholder="Enter judge password…" autoFocus/>
+          {jpErr&&<p className="text-xs text-red-500 font-semibold">{jpErr}</p>}
+          <button onClick={handleJudgeLogin} disabled={!jpInput}
+            className="w-full py-3 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition-all text-sm">
+            Sign In as Judge
+          </button>
+        </div>
+        <a href="index.html" className="flex items-center justify-center gap-1.5 text-sm text-slate-400 hover:text-slate-700"><Icon name="ArrowLeft" size={14}/> Home</a>
+      </div>
+    </div>
+  );
 
   return(
     <div className="min-h-screen bg-slate-50 flex flex-col">
