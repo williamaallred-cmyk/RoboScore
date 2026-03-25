@@ -146,6 +146,9 @@ function applyResult(bracket, matchId, winnerId) {
 // After recording a result, see if we can progress the overall phase
 function advanceBracket(bracket) {
   const { phase } = bracket;
+  // Firebase drops null values on round-trip, so normalize them back to null
+  // to avoid writing undefined into the DB.
+  bracket = { ...bracket, champion: bracket.champion ?? null, finalists: bracket.finalists ?? [] };
 
   // Always auto-resolve BYE matches first — this ensures that after all real
   // matches in a phase are decided, the phase transition fires correctly.
@@ -266,7 +269,7 @@ function applyFinalsGame(bracket, winnerId) {
     return { ...m, winsA, winsB, games, winner };
   });
   const fm = matches.find(m => m.phase === 'finals');
-  return advanceBracket({ ...bracket, matches, champion: fm?.winner || bracket.champion });
+  return advanceBracket({ ...bracket, matches, champion: fm?.winner ?? bracket.champion ?? null });
 }
 
 // ─── Firebase persistence helpers ─────────────────────────────────────────────
